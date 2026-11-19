@@ -23,3 +23,11 @@ target_include_directories(pop_runtime PUBLIC ${PROJECT_SOURCE_DIR} PRIVATE ${LU
 target_link_libraries(pop_runtime PUBLIC Threads::Threads spdlog::spdlog
   PRIVATE yaml-cpp::yaml-cpp ${LUA_LIBRARIES})
 target_compile_options(pop_runtime PRIVATE -Wall -Wextra -Wpedantic)
+
+add_library(pop_apps apps/process.cc)
+target_link_libraries(pop_apps PUBLIC pop_runtime)
+
+foreach(role IN ITEMS gateway game_worker platform control)
+  add_executable(${role} apps/${role}/main.cc)
+  target_link_libraries(${role} PRIVATE pop_apps)
+endforeach()

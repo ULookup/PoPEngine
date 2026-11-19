@@ -1,0 +1,3 @@
+# Control 的本地启动配置，指定世界协调进程的角色和日志队列容量。
+role: control
+log_entries: 1024

@@ -1,0 +1,14 @@
+# GameWorker 的本地启动配置，指定线程数、各类邮箱预算及 Space 到 Scene 分片的绑定。
+role: game_worker
+log_entries: 1024
+player_shards: 1
+scene_shards: 1
+compute_threads: 1
+queues:
+  control:    {max_entries: 16, max_bytes: 8192, max_age_ms: 1000, per_source: 4}
+  input:      {max_entries: 32, max_bytes: 8192, max_age_ms: 250,  per_source: 8}
+  result:     {max_entries: 16, max_bytes: 8192, max_age_ms: 100,  per_source: 4}
+  background: {max_entries: 16, max_bytes: 8192, max_age_ms: 100,  per_source: 4}
+spaces:
+  - {space_id: 101, scene_shard: 0}
+  - {space_id: 102, scene_shard: 0}

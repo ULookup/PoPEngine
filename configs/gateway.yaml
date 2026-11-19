@@ -1,0 +1,3 @@
+# Gateway 的本地启动配置，指定网关进程的角色和日志队列容量。
+role: gateway
+log_entries: 1024
