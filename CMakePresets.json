@@ -1,0 +1,20 @@
+{
+  "version": 3,
+  "configurePresets": [{
+    "name": "linux-gcc",
+    "description": "配置 Linux 上的 GCC、Ninja 和 vcpkg 工具链，供同名构建与测试预设使用。",
+    "generator": "Ninja",
+    "binaryDir": "${sourceDir}/build/linux-gcc",
+    "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+    "cacheVariables": {
+      "CMAKE_CXX_COMPILER": "g++",
+      "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+      "VCPKG_TARGET_TRIPLET": "x64-linux"
+    }
+  }],
+  "buildPresets": [{"name": "linux-gcc", "configurePreset": "linux-gcc", "jobs": 4}],
+  "testPresets": [{
+    "name": "linux-gcc", "configurePreset": "linux-gcc",
+    "output": {"outputOnFailure": true}
+  }]
+}
