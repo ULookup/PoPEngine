@@ -10,3 +10,14 @@ find_package(Threads REQUIRED)
 find_package(yaml-cpp CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(Lua REQUIRED)
+
+add_library(pop_runtime
+  engine/core/config.cc
+  engine/core/log.cc
+  engine/runtime/mailbox.cc
+  engine/runtime/execution_shard.cc
+  engine/script/lua_vm.cc)
+target_include_directories(pop_runtime PUBLIC ${PROJECT_SOURCE_DIR} PRIVATE ${LUA_INCLUDE_DIR})
+target_link_libraries(pop_runtime PUBLIC Threads::Threads spdlog::spdlog
+  PRIVATE yaml-cpp::yaml-cpp ${LUA_LIBRARIES})
+target_compile_options(pop_runtime PRIVATE -Wall -Wextra -Wpedantic)
