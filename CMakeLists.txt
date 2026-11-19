@@ -16,7 +16,9 @@ add_library(pop_runtime
   engine/core/log.cc
   engine/runtime/mailbox.cc
   engine/runtime/execution_shard.cc
-  engine/script/lua_vm.cc)
+  engine/script/lua_vm.cc
+  engine/scene/scene_shard.cc
+  services/game_worker.cc)
 target_include_directories(pop_runtime PUBLIC ${PROJECT_SOURCE_DIR} PRIVATE ${LUA_INCLUDE_DIR})
 target_link_libraries(pop_runtime PUBLIC Threads::Threads spdlog::spdlog
   PRIVATE yaml-cpp::yaml-cpp ${LUA_LIBRARIES})
