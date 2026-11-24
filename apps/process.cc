@@ -19,11 +19,13 @@
 
 namespace pop {
 namespace {
+
 // 一个进程角色及其负责启停的服务名，用于装配和生命周期日志。
 struct Assembly {
   const char* m_role;                   // 配置与日志共用的角色名。
   std::vector<const char*> m_services;  // 按启动顺序排列的服务名。
 };
+
 // 将入口选定的角色映射到固定服务组。
 Assembly Services(Role role) {
   switch (role) {
@@ -40,12 +42,15 @@ Assembly Services(Role role) {
   }
   throw std::logic_error("unknown role");
 }
+
 // 取得唯一的 --config 路径；各角色使用同一启动约定。
 std::string ConfigPath(int argc, char** argv) {
-  if (argc != 3 || std::string_view(argv[1]) != "--config")
+  if (argc != 3 || std::string_view(argv[1]) != "--config") {
     throw std::runtime_error("usage: --config <path>");
+  }
   return argv[2];
 }
+
 }  // namespace
 
 int RunProcess(Role role, int argc, char** argv) {
@@ -59,22 +64,34 @@ int RunProcess(Role role, int argc, char** argv) {
     sigemptyset(&signals);
     sigaddset(&signals, SIGINT);
     sigaddset(&signals, SIGTERM);
-    if (pthread_sigmask(SIG_BLOCK, &signals, nullptr) != 0)
+    if (pthread_sigmask(SIG_BLOCK, &signals, nullptr) != 0) {
       throw std::runtime_error("cannot block shutdown signals");
+    }
+
     StartLogging(assembly.m_role, config.m_logEntries);
     logging_ready = true;
+
     std::unique_ptr<GameWorker> worker;
-    if (role == Role::GameWorker) worker = std::make_unique<GameWorker>(config);
-    for (auto service : assembly.m_services)
+    if (role == Role::GameWorker) {
+      worker = std::make_unique<GameWorker>(config);
+    }
+    for (auto service : assembly.m_services) {
       LOG_INFO("event=service_start service={}", service);
+    }
     LOG_INFO("event=ready");
+
     int signal = 0;
-    if (sigwait(&signals, &signal) != 0)
+    if (sigwait(&signals, &signal) != 0) {
       throw std::runtime_error("sigwait failed");
-    if (worker) worker->stop();
+    }
+
+    if (worker) {
+      worker->stop();
+    }
     for (auto it = assembly.m_services.rbegin();
-         it != assembly.m_services.rend(); ++it)
+         it != assembly.m_services.rend(); ++it) {
       LOG_INFO("event=service_stop service={}", *it);
+    }
     LOG_INFO("event=stopped signal={}", signal);
     StopLogging();
     return 0;
@@ -89,4 +106,5 @@ int RunProcess(Role role, int argc, char** argv) {
     return 1;
   }
 }
+
 }  // namespace pop

@@ -3,6 +3,7 @@
 #pragma once
 
 namespace pop {
+
 // 选择本进程装配的服务组，也决定配置文件应声明的角色。
 enum class Role {
   Gateway,     // 网关服务进程。
@@ -13,4 +14,5 @@ enum class Role {
 
 // 按 role 解析命令行并运行至停机；正常退出返回 0，启动或运行失败返回 1。
 int RunProcess(Role role, int argc, char** argv);
+
 }  // namespace pop
