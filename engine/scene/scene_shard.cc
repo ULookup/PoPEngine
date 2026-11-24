@@ -10,37 +10,46 @@
 #include "engine/core/log.h"
 
 namespace pop {
+
 SpaceChannel::SpaceChannel(SpaceConfig config, Budgets budgets)
     : m_config(config), m_mailbox(budgets) {}
+
 Snapshot SpaceChannel::snapshot() const {
   // 读锁与发布共用同一互斥量，保证一次复制能读到完整的一步。
   std::lock_guard lock(m_mutex);
   return m_snapshot;
 }
+
 void SpaceChannel::publish(const Snapshot& snapshot) {
   std::lock_guard lock(m_mutex);
   m_snapshot = snapshot;
 }
 
 SceneShard::SceneShard(Dispatch dispatch) : m_dispatch(std::move(dispatch)) {}
+
 void SceneShard::addSpace(SpaceChannel& channel, TimePoint now,
                           std::unique_ptr<SpaceSimulation> simulation) {
-  if (!m_spaces
-           .emplace(channel.m_config.m_id,
-                    Space{channel, now + TICK_STEP, std::move(simulation)})
-           .second)
+  const auto insertion =
+      m_spaces.emplace(channel.m_config.m_id,
+                       Space{channel, now + TICK_STEP, std::move(simulation)});
+  if (!insertion.second) {
     throw std::logic_error("duplicate Space on Scene shard");
+  }
 }
 
 RequestStatus SceneShard::bindEntity(Space& space, EntityBinding binding) {
   auto [it, inserted] =
       space.m_entities.try_emplace(binding.m_entity, Entity{binding});
   const auto& current = it->second.m_binding;
-  if (inserted || current == binding) return RequestStatus::Completed;
+  if (inserted || current == binding) {
+    return RequestStatus::Completed;
+  }
   if (binding.m_generation < current.m_generation ||
       (binding.m_generation == current.m_generation &&
-       binding.m_sessionEpoch < current.m_sessionEpoch))
+       binding.m_sessionEpoch < current.m_sessionEpoch)) {
     return RequestStatus::StaleBinding;
+  }
+
   // 同一实体重绑会话时延续状态版本，并清除旧序号、控制和待提交任务。
   const Id version = binding.m_generation == current.m_generation
                          ? it->second.m_version + 1
@@ -52,6 +61,7 @@ RequestStatus SceneShard::bindEntity(Space& space, EntityBinding binding) {
 void SceneShard::receiveResults(Space& space, TimePoint now) {
   auto& channel = space.m_channel;
   auto batch = channel.m_mailbox.take(Lane::Result, now, now);
+
   // 按实体标识派发，同一窗口内的提交顺序与计算线程的完成先后无关。
   std::stable_sort(
       batch.begin(), batch.end(),
@@ -59,19 +69,23 @@ void SceneShard::receiveResults(Space& space, TimePoint now) {
         return std::get<WorkResult>(left.m_message.m_payload).m_key.m_entity <
                std::get<WorkResult>(right.m_message.m_payload).m_key.m_entity;
       });
+
   for (const auto& item : batch) {
     const auto& result = std::get<WorkResult>(item.m_message.m_payload);
     const auto& key = result.m_key;
     auto it = space.m_entities.find(key.m_entity);
+
     const char* reason = nullptr;  // 非空时记录丢弃原因并跳过提交。
-    if (item.m_expired)
+    if (item.m_expired) {
       reason = "expired";
-    else if (it == space.m_entities.end() || !it->second.m_pending)
+    } else if (it == space.m_entities.end() || !it->second.m_pending) {
       reason = "no_pending_task";
-    else if (key.m_version != it->second.m_version)
+    } else if (key.m_version != it->second.m_version) {
       reason = "version_mismatch";
-    else if (key != *it->second.m_pending)
+    } else if (key != *it->second.m_pending) {
       reason = "task_mismatch";
+    }
+
     if (reason) {
       ++space.m_droppedResults;
       LOG_INFO(
@@ -81,6 +95,7 @@ void SceneShard::receiveResults(Space& space, TimePoint now) {
           key.m_tick, key.m_version, reason);
       continue;
     }
+
     auto& entity = it->second;
     space.m_simulation->commit(entity.m_binding, key.m_stage, result.m_output);
     ++space.m_state.m_resultCommits;
@@ -105,14 +120,16 @@ void SceneShard::receiveInputs(Space& space, TimePoint now) {
           input.m_seq);
       continue;
     }
+
     auto& entity = it->second;
     entity.m_inputSeq = input.m_seq;
     ++entity.m_version;
     ++space.m_state.m_inputs;
-    if (item.m_expired)
+    if (item.m_expired) {
       entity.m_input.reset();
-    else
+    } else {
       entity.m_input = std::move(input);
+    }
     LOG_INFO(
         "event=input_applied shard={} space={} tick={} entity={} input_seq={} "
         "status={} trace={}",
@@ -130,17 +147,31 @@ void SceneShard::advanceEntities(Space& space, TimePoint now) {
       entity.m_input.reset();
       ++entity.m_version;
     }
-    if (!space.m_simulation) continue;
+
+    if (!space.m_simulation) {
+      continue;
+    }
     auto update = space.m_simulation->advance(
         entity.m_binding, space.m_state.m_tick,
         entity.m_input ? &*entity.m_input : nullptr);
-    if (update.m_changed) ++entity.m_version;
-    if (!update.m_work) continue;
+    if (update.m_changed) {
+      ++entity.m_version;
+    }
+    if (!update.m_work) {
+      continue;
+    }
+
     auto& request = *update.m_work;
     // 本地静态放置的首次承载代次为 1；任务只在本进程内流转。
     WorkKey key{
-        config.m_id,      1,  space.m_state.m_tick,         request.m_stage,
-        entity.m_version, id, entity.m_binding.m_generation};
+        .m_space = config.m_id,
+        .m_ownerEpoch = 1,
+        .m_tick = space.m_state.m_tick,
+        .m_stage = request.m_stage,
+        .m_version = entity.m_version,
+        .m_entity = id,
+        .m_generation = entity.m_binding.m_generation,
+    };
     auto status = m_dispatch(
         space.m_channel,
         {key, std::move(request.m_snapshot), request.m_compute}, now);
@@ -159,19 +190,24 @@ void SceneShard::step(Space& space, TimePoint now) {
   auto& channel = space.m_channel;
   const auto& config = channel.m_config;
   auto& state = space.m_state;
+
   auto controls = channel.m_mailbox.take(Lane::Control, now, space.m_nextTick);
   for (auto& item : controls) {
-    if (auto* bind = std::get_if<BindEntity>(&item.m_message.m_payload))
+    if (auto* bind = std::get_if<BindEntity>(&item.m_message.m_payload)) {
       bind->m_reply.set_value(item.m_expired
                                   ? RequestStatus::Expired
                                   : bindEntity(space, bind->m_binding));
+    }
   }
+
   receiveResults(space, now);
   ++state.m_tick;
   receiveInputs(space, now);
   advanceEntities(space, now);
+
   state.m_entities = space.m_entities.size();
   channel.publish(state);
+
   for (auto& item : controls) {
     if (auto* request = std::get_if<Inspect>(&item.m_message.m_payload)) {
       request->m_reply.set_value(item.m_expired ? RequestStatus::Expired
@@ -180,6 +216,7 @@ void SceneShard::step(Space& space, TimePoint now) {
                config.m_id, state.m_tick, request->m_requestId, item.m_expired);
     }
   }
+
   space.m_nextTick += TICK_STEP;
   if (state.m_tick == 1 || state.m_tick % 20 == 0) {
     // lag 是相对预定截止点的调度迟到量，elapsed 是本步已耗费的执行时间。
@@ -193,6 +230,7 @@ void SceneShard::step(Space& space, TimePoint now) {
         config.m_shard, config.m_id, state.m_tick, state.m_entities,
         state.m_inputs, state.m_dispatched, state.m_resultCommits,
         space.m_droppedResults, lag.count(), elapsed.count());
+
     for (Lane lane :
          {Lane::Control, Lane::Input, Lane::Result, Lane::Background}) {
       const auto stats = channel.m_mailbox.stats(lane, now);
@@ -219,6 +257,7 @@ TimePoint SceneShard::advance(TimePoint now) {
       step(space, now);
       ++steps;
     }
+
     if (steps == MAX_CATCH_UP) {
       // 达到单轮上限后仍已到期的步数，留给后续调度轮补算。
       const auto remaining = now >= space.m_nextTick
@@ -234,4 +273,5 @@ TimePoint SceneShard::advance(TimePoint now) {
   }
   return deadline;
 }
+
 }  // namespace pop

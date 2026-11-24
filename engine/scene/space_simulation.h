@@ -12,6 +12,7 @@
 #include "engine/runtime/mailbox.h"
 
 namespace pop {
+
 // 场景模块对一个实体的阶段快照发起的一次只读计算。
 struct WorkRequest {
   Id m_stage;                 // 模块用于区分计算阶段的标识。
@@ -30,9 +31,11 @@ class SpaceSimulation {
  public:
   // 随所属 Space 释放模块状态。
   virtual ~SpaceSimulation() = default;
+
   // 按一个固定步长推进绑定实体；input 仅在调用期间可借用，空值表示停止输入。
   virtual EntityStep advance(EntityBinding binding, Tick tick,
                              const ControlInput* input) = 0;
+
   // 在原任务的下一提交窗口接收已校验结果，output 仅在本次调用期间有效。
   virtual void commit(EntityBinding binding, Id stage,
                       std::span<const std::byte> output) = 0;
@@ -41,4 +44,5 @@ class SpaceSimulation {
 // 在所属分片上为指定 Space 构造独立模块，可返回空指针以空载运行。
 using SimulationFactory =
     std::function<std::unique_ptr<SpaceSimulation>(SpaceId)>;
+
 }  // namespace pop
