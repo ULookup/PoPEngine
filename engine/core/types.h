@@ -8,14 +8,18 @@
 #include <cstdint>
 
 namespace pop {
-using Clock = std::chrono::steady_clock;  // 调度和消息有效期使用的单调时钟。
-using TimePoint = Clock::time_point;      // 单调时钟上的一个时刻。
+
+using Clock = std::chrono::steady_clock;         // 调度与消息有效期的单调时钟。
+using TimePoint = Clock::time_point;             // 单调时钟上的一个时刻。
 using Milliseconds = std::chrono::milliseconds;  // 以毫秒计的时长。
-using SpaceId = std::uint64_t;                   // 标识一个地图或战场实例。
-using Id = std::uint64_t;    // 实体、请求、代次和序号等使用的整数类型。
-using Tick = std::uint64_t;  // 一个 Space 内的模拟步编号。
+
+using SpaceId = std::uint64_t;  // 标识一个地图或战场实例。
+using Id = std::uint64_t;       // 实体、请求、代次和序号等使用的整数类型。
+using Tick = std::uint64_t;     // 一个 Space 内的模拟步编号。
+
 // 20 Hz 模拟中相邻两步之间的固定时长。
 inline constexpr Milliseconds TICK_STEP{50};
+
 // 同一调度轮中，一个 Space 最多补算的步数。
 inline constexpr int MAX_CATCH_UP = 2;
 
@@ -26,6 +30,7 @@ struct QueueBudget {
   Milliseconds m_age;       // 消息自创建起达到此年龄即过期。
   std::size_t m_perSource;  // 一次取件中同一来源最多可取出的条数。
 };
+
 // 一个 Space 的四份通道预算，顺序与 Lane 枚举一致。
 using Budgets = std::array<QueueBudget, 4>;
 
@@ -34,8 +39,12 @@ struct EntityBinding {
   Id m_entity;        // 受控实体的标识。
   Id m_generation;    // 该标识对应的实体生命周期代次。
   Id m_sessionEpoch;  // 当前控制会话的绑定代次。
+
   // 已分配的实体标识和两个代次都必须为正。
-  bool valid() const { return m_entity && m_generation && m_sessionEpoch; }
+  bool valid() const {
+    return m_entity && m_generation && m_sessionEpoch;
+  }
+
   // 三个字段全部相同，两个输入才属于同一绑定。
   bool operator==(const EntityBinding&) const = default;
 };
@@ -54,4 +63,5 @@ struct Snapshot {
   Id m_dispatched = 0;         // 已成功投递到后台队列的任务总数。
   Id m_resultCommits = 0;      // 已通过校验且在分片提交的结果总数。
 };
+
 }  // namespace pop

@@ -133,6 +133,7 @@ struct QueueStats {
   Id m_merged = 0;             // 较新输入成功覆盖待处理输入的次数。
   Id m_rejected = 0;           // 邮箱拒绝投递的总次数。
   Id m_expired = 0;            // 出队时被标为过期的消息总数。
+
   // 按 Admission 原因累计的投递拒绝次数。
   std::array<Id, static_cast<std::size_t>(Admission::UnknownSpace) + 1>
       m_rejections{};
@@ -172,9 +173,11 @@ class Mailbox {
     std::deque<Message> m_items;  // 待取消息按入队顺序排列，合并时原位替换。
     QueueStats m_stats;           // 预算占用字节与事件计数，随入队和出队更新。
   };
+
   Budgets m_budgets;              // 各通道的容量、最大年龄和来源配额。
   mutable std::mutex m_mutex;     // 保护队列、计数和投递入口的关闭状态。
   std::array<Queue, 4> m_queues;  // 各通道独立的队列，按 Lane 下标访问。
   bool m_closed = false;          // 为真时，后续 post 返回 Closed。
 };
+
 }  // namespace pop

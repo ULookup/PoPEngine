@@ -9,13 +9,17 @@
 #include <string>
 
 namespace pop {
+
 // 安装角色 role 的默认异步日志器，队列容量为 entries 条。
 void StartLogging(const std::string& role, std::size_t entries);
+
 // 在生产日志的线程退出后调用，关闭日志器并回收后台写入线程。
 void StopLogging();
+
 }  // namespace pop
 
 // 用格式串和参数记录普通运行事件。
 #define LOG_INFO(...) SPDLOG_INFO(__VA_ARGS__)
+
 // 用格式串和参数记录错误原因。
 #define LOG_ERROR(...) SPDLOG_ERROR(__VA_ARGS__)

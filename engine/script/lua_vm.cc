@@ -6,10 +6,17 @@
 #include <stdexcept>
 
 namespace pop {
-void LuaCloser::operator()(lua_State* state) const { lua_close(state); }
+
+void LuaCloser::operator()(lua_State* state) const {
+  lua_close(state);
+}
+
 LuaVm CreateLuaVm() {
   LuaVm vm(luaL_newstate());
-  if (!vm) throw std::runtime_error("Lua VM allocation failed");
+  if (!vm) {
+    throw std::runtime_error("Lua VM allocation failed");
+  }
   return vm;
 }
+
 }  // namespace pop

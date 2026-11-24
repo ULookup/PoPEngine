@@ -9,6 +9,7 @@
 #include "engine/core/types.h"
 
 namespace pop {
+
 // 校验后的本地进程配置；GameWorker 使用其中的线程和 Space 配置。
 struct Config {
   std::size_t m_logEntries{};         // 异步日志队列能容纳的条数。
@@ -21,4 +22,5 @@ struct Config {
 
 // 从 path 读取与 role 匹配的配置；缺项或绑定冲突时抛出异常。
 Config LoadConfig(const std::string& path, const std::string& role);
+
 }  // namespace pop

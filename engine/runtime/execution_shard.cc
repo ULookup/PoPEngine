@@ -13,12 +13,14 @@
 #include "engine/script/lua_vm.h"
 
 namespace pop {
+
 std::jthread StartExecutionShard(
     std::string service, unsigned index, std::function<ShardStep()> initialize,
     std::function<void(std::exception_ptr)> on_failure) {
   // initialized 由分片线程写入；启动方通过 ready 等待就绪或取得启动异常。
   std::promise<void> initialized;
   auto ready = initialized.get_future();
+
   std::jthread thread(
       [service = std::move(service), index, initialize = std::move(initialize),
        on_failure = std::move(on_failure),
@@ -27,29 +29,37 @@ std::jthread StartExecutionShard(
         try {
           auto vm = CreateLuaVm();
           auto step = initialize();
+
           // wake 和对应的锁只用于可被停止请求打断的休眠。
           std::mutex mutex;
           std::condition_variable_any wake;
           std::unique_lock lock(mutex);
+
           LOG_INFO("event=shard_ready service={} shard={}", service, index);
           initialized.set_value();
           running = true;
+
           while (!stop.stop_requested()) {
             auto deadline = step ? step(Clock::now()) : TimePoint::max();
-            if (deadline == TimePoint::max())
+            if (deadline == TimePoint::max()) {
               wake.wait(lock, stop, [] { return false; });
-            else
+            } else {
               wake.wait_until(lock, stop, deadline, [] { return false; });
+            }
           }
+
           LOG_INFO("event=shard_stop service={} shard={}", service, index);
         } catch (...) {
-          if (running)
+          if (running) {
             on_failure(std::current_exception());
-          else
+          } else {
             initialized.set_exception(std::current_exception());
+          }
         }
       });
+
   ready.get();
   return thread;
 }
+
 }  // namespace pop
