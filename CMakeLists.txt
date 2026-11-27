@@ -73,6 +73,7 @@ option(POP_BUILD_DATA "构建阶段三持久化、可靠消息与缓存模块" O
 if(POP_BUILD_DATA)
   add_subdirectory(storage)
   add_subdirectory(messaging)
+  add_subdirectory(engine/cache)
 endif()
 
 if(BUILD_TESTING)
