@@ -6,6 +6,7 @@
 #include <array>
 #include <cstddef>
 #include <deque>
+#include <functional>
 #include <future>
 #include <mutex>
 #include <span>
@@ -50,6 +51,22 @@ struct ControlInput {
   Bytes m_state;            // 由生产者编码、场景模块解释的完整状态。
   TimePoint m_validUntil;   // 单调时钟截止点，到达此刻就停止沿用输入。
 };
+
+// 连续输入在 Scene 提交或队列中终止的原因。
+enum class InputResult {
+  Applied,     // 本步采纳并已发布快照。
+  Expired,     // 本步处理了已过期输入。
+  Stale,       // 绑定或序号已经失效。
+  Superseded,  // 在队列中已被较新输入覆盖。
+  Cancelled    // 停机清理了仍在排队的输入。
+};
+
+// 仅做有界非阻塞投递。Tick 为零表示消息在 Scene 采样前即已结束。
+using InputReply = std::function<void(InputResult, Tick)>;
+
+// 在锁外通知输入终态。调用方的通知失败不会中断已经完成的入队或提交。
+void NotifyInput(const InputReply& reply, InputResult result,
+                 Tick tick) noexcept;
 
 // 已受理的控制请求最终向发起方报告的处理结果。
 enum class RequestStatus {
@@ -114,6 +131,7 @@ struct Message {
   TimePoint m_created;  // 单调时钟上的创建时刻，用于计算年龄和筛选批次。
   Payload m_payload;    // 消费者要处理的请求、输入、结果或任务。
   std::string m_trace;  // 可选跟踪标识，用于关联投递与处理日志。
+  InputReply m_inputReply{};  // 可选输入回执，不随持续控制状态保存。
 
   // 返回计入队列预算的字节数，包括消息对象以及跟踪串和载荷的容量。
   std::size_t bytes() const;

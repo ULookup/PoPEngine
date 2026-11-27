@@ -149,7 +149,16 @@ void TwoSpaces() {
   auto now = start + 51ms;
   auto left_bound = Bind(a, left, now);
   auto right_bound = Bind(a, right, now);
-  a.m_mailbox.post(Input(left, 7, now, 200ms), now);
+  auto left_input = Input(left, 7, now, 200ms);
+  Tick receipt_tick = 0;
+  Tick published_tick = 0;
+  left_input.m_inputReply = [&](InputResult result, Tick tick) {
+    if (result == InputResult::Applied) {
+      receipt_tick = tick;
+      published_tick = a.snapshot().m_tick;
+    }
+  };
+  a.m_mailbox.post(std::move(left_input), now);
   a.m_mailbox.post(Input(right, 7, now, 200ms, {}, std::byte{2}), now);
   b.m_mailbox.post(Input(left, 7, now, 200ms), now);
 
@@ -158,6 +167,8 @@ void TwoSpaces() {
             right_bound.get() == RequestStatus::Completed,
         "bind did not complete");
   auto first = a.snapshot();
+  Check(receipt_tick == 2 && published_tick == receipt_tick,
+        "input receipt preceded publication of its authoritative tick");
   Check(first.m_tick == 2 && first.m_entities == 2 && first.m_inputs == 2 &&
             state.m_positions.at(10) == 0.05 &&
             state.m_positions.at(11) == -0.05,
@@ -314,6 +325,11 @@ void MailboxLimits() {
   TimePoint now{};
   auto binding = EntityBinding{1, 1, 1};
   auto small = Input(binding, 1, now, 100ms);
+  bool superseded = false;
+  small.m_inputReply = [&](InputResult result, Tick tick) {
+    superseded = result == InputResult::Superseded && tick == 0;
+    throw std::runtime_error("reply consumer closed");
+  };
   auto replacement = Input(binding, 2, now, 100ms, std::string(64, 'a'));
   const auto max_bytes = replacement.bytes();
   budgets[static_cast<int>(Lane::Input)] = {1, max_bytes, 50ms, 1};
@@ -325,6 +341,7 @@ void MailboxLimits() {
         "first input rejected");
   Check(box.post(std::move(replacement), now) == Admission::Merged,
         "newer full state did not replace queued input");
+  Check(superseded, "replaced input lost its terminal receipt");
   Check(box.stats(Lane::Input, now).m_bytes == max_bytes,
         "wrong merged byte count");
 

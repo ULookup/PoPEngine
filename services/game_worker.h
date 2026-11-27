@@ -3,6 +3,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "engine/core/config.h"
@@ -26,7 +27,10 @@ class GameWorker {
 
   // 按目标 Space 投递完整输入，保留调用方的有效期与可选跟踪标识。
   Admission postInput(SpaceId space_id, ControlInput input,
-                      std::string trace = {});
+                      std::string trace = {}, InputReply reply = {});
+
+  // 复制目标 Space 最近一次发布的整步统计，未知 Space 返回空值。
+  std::optional<Snapshot> snapshot(SpaceId space_id) const;
 
   // 停止处理新工作并回收线程，分片的运行异常在此报告给调用方。
   void stop();

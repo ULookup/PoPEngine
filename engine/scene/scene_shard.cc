@@ -104,7 +104,9 @@ void SceneShard::receiveResults(Space& space, TimePoint now) {
   }
 }
 
-void SceneShard::receiveInputs(Space& space, TimePoint now) {
+std::vector<std::pair<InputReply, InputResult>> SceneShard::receiveInputs(
+    Space& space, TimePoint now) {
+  std::vector<std::pair<InputReply, InputResult>> replies;
   auto& channel = space.m_channel;
   for (auto& item :
        channel.m_mailbox.take(Lane::Input, now, space.m_nextTick)) {
@@ -118,6 +120,10 @@ void SceneShard::receiveInputs(Space& space, TimePoint now) {
           "reason=invalid_binding_or_sequence",
           channel.m_config.m_id, space.m_state.m_tick, input.m_binding.m_entity,
           input.m_seq);
+      if (item.m_message.m_inputReply) {
+        replies.emplace_back(std::move(item.m_message.m_inputReply),
+                             InputResult::Stale);
+      }
       continue;
     }
 
@@ -130,6 +136,11 @@ void SceneShard::receiveInputs(Space& space, TimePoint now) {
     } else {
       entity.m_input = std::move(input);
     }
+    if (item.m_message.m_inputReply) {
+      replies.emplace_back(
+          std::move(item.m_message.m_inputReply),
+          item.m_expired ? InputResult::Expired : InputResult::Applied);
+    }
     LOG_INFO(
         "event=input_applied shard={} space={} tick={} entity={} input_seq={} "
         "status={} trace={}",
@@ -137,6 +148,7 @@ void SceneShard::receiveInputs(Space& space, TimePoint now) {
         entity.m_binding.m_entity, entity.m_inputSeq,
         item.m_expired ? "expired_stop" : "applied", item.m_message.m_trace);
   }
+  return replies;
 }
 
 void SceneShard::advanceEntities(Space& space, TimePoint now) {
@@ -165,7 +177,7 @@ void SceneShard::advanceEntities(Space& space, TimePoint now) {
     // 本地静态放置的首次承载代次为 1；任务只在本进程内流转。
     WorkKey key{
         .m_space = config.m_id,
-        .m_ownerEpoch = 1,
+        .m_ownerEpoch = INITIAL_SPACE_OWNER_EPOCH,
         .m_tick = space.m_state.m_tick,
         .m_stage = request.m_stage,
         .m_version = entity.m_version,
@@ -202,11 +214,14 @@ void SceneShard::step(Space& space, TimePoint now) {
 
   receiveResults(space, now);
   ++state.m_tick;
-  receiveInputs(space, now);
+  auto input_replies = receiveInputs(space, now);
   advanceEntities(space, now);
 
   state.m_entities = space.m_entities.size();
   channel.publish(state);
+  for (const auto& [reply, result] : input_replies) {
+    NotifyInput(reply, result, state.m_tick);
+  }
 
   for (auto& item : controls) {
     if (auto* request = std::get_if<Inspect>(&item.m_message.m_payload)) {

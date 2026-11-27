@@ -7,6 +7,8 @@
 #include <unordered_map>
 #include <utility>
 
+#include "engine/core/log.h"
+
 namespace pop {
 namespace {
 
@@ -59,6 +61,16 @@ WorkResult Compute(const Work& work) {
   return {work.m_key, work.m_compute(work.m_snapshot)};
 }
 
+void NotifyInput(const InputReply& reply, InputResult result,
+                 Tick tick) noexcept {
+  try {
+    reply(result, tick);
+  } catch (...) {
+    LOG_ERROR("event=input_reply_failed status={} tick={}",
+              static_cast<int>(result), tick);
+  }
+}
+
 std::size_t Message::bytes() const {
   const auto base = sizeof(Message) + m_trace.capacity();
   if (const auto* input = std::get_if<ControlInput>(&m_payload)) {
@@ -79,7 +91,7 @@ Admission Mailbox::post(Message message, TimePoint now) {
   // index 同时选中消息队列 items、统计 stats 和该通道的预算 budget。
   // 持锁期间一起修改队列和占用字节，保证并发投递看到一致的剩余容量。
   auto index = static_cast<std::size_t>(LaneOf(message.m_payload));
-  std::lock_guard lock(m_mutex);
+  std::unique_lock lock(m_mutex);
   auto& [items, stats] = m_queues[index];
   const auto& budget = m_budgets[index];
 
@@ -135,8 +147,14 @@ Admission Mailbox::post(Message message, TimePoint now) {
       queued.m_source = message.m_source;
       queued.m_created = message.m_created;
       queued.m_payload = std::move(message.m_payload);
+      auto replaced =
+          std::exchange(queued.m_inputReply, std::move(message.m_inputReply));
       stats.m_bytes = other_bytes + queued.bytes();
       ++stats.m_merged;
+      lock.unlock();
+      if (replaced) {
+        NotifyInput(replaced, InputResult::Superseded, 0);
+      }
       return Admission::Merged;
     }
   }
@@ -202,12 +220,16 @@ void Mailbox::close() {
 }
 
 std::size_t Mailbox::cancelRemaining() {
-  std::lock_guard lock(m_mutex);
+  std::vector<InputReply> replies;
+  std::unique_lock lock(m_mutex);
   std::size_t cancelled = 0;  // 四个通道本次实际清除的消息总数。
 
   for (auto& [items, stats] : m_queues) {
     cancelled += items.size();
     for (auto& item : items) {
+      if (item.m_inputReply) {
+        replies.push_back(std::move(item.m_inputReply));
+      }
       if (auto* request = std::get_if<Inspect>(&item.m_payload)) {
         request->m_reply.set_value(RequestStatus::Cancelled);
       }
@@ -218,6 +240,10 @@ std::size_t Mailbox::cancelRemaining() {
 
     items.clear();
     stats.m_bytes = 0;
+  }
+  lock.unlock();
+  for (const auto& reply : replies) {
+    NotifyInput(reply, InputResult::Cancelled, 0);
   }
   return cancelled;
 }

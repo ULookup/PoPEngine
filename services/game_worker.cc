@@ -162,19 +162,29 @@ class GameWorker::Runtime {
 
   // 按只读 Space 路由表投递，以入口的单调时刻计量队列年龄。
   Admission post(SpaceId space_id, Id source, Payload payload,
-                 std::string trace) {
+                 std::string trace, InputReply reply = {}) {
     auto it = m_channels.find(space_id);
     if (it == m_channels.end()) {
       return Admission::UnknownSpace;
     }
     auto now = Clock::now();
     return it->second->m_mailbox.post(
-        {source, now, std::move(payload), std::move(trace)}, now);
+        {source, now, std::move(payload), std::move(trace), std::move(reply)},
+        now);
   }
 
   // 在所有者释放实例时完成资源回收。
   ~Runtime() {
     shutdown();
+  }
+
+  // 通道表在启动后只读，快照通道负责在锁内复制最近一次提交。
+  std::optional<Snapshot> snapshot(SpaceId space_id) const {
+    const auto it = m_channels.find(space_id);
+    if (it == m_channels.end()) {
+      return std::nullopt;
+    }
+    return it->second->snapshot();
   }
 
   // 完成停机，并将分片保存的异常重新抛给进程入口。
@@ -255,6 +265,10 @@ GameWorker::GameWorker(const Config& config,
 
 GameWorker::~GameWorker() = default;
 
+std::optional<Snapshot> GameWorker::snapshot(SpaceId space_id) const {
+  return m_runtime->snapshot(space_id);
+}
+
 void GameWorker::stop() {
   m_runtime->stop();
 }
@@ -265,9 +279,10 @@ Admission GameWorker::bindEntity(SpaceId space_id, BindEntity request) {
 }
 
 Admission GameWorker::postInput(SpaceId space_id, ControlInput input,
-                                std::string trace) {
+                                std::string trace, InputReply reply) {
   const auto source = input.m_binding.m_entity;
-  return m_runtime->post(space_id, source, std::move(input), std::move(trace));
+  return m_runtime->post(space_id, source, std::move(input), std::move(trace),
+                         std::move(reply));
 }
 
 }  // namespace pop

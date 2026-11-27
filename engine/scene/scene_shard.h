@@ -8,6 +8,8 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <utility>
+#include <vector>
 
 #include "engine/runtime/mailbox.h"
 #include "engine/scene/space_simulation.h"
@@ -79,8 +81,9 @@ class SceneShard {
   // 在当前结果窗口按派发顺序提交匹配项，一项最多提交一次。
   void receiveResults(Space& space, TimePoint now);
 
-  // 采纳本步截止前的输入，按实体及会话维护独立的序号。
-  void receiveInputs(Space& space, TimePoint now);
+  // 采纳本步截止前的输入，保留有回执的结果直到此步快照发布。
+  std::vector<std::pair<InputReply, InputResult>> receiveInputs(Space& space,
+                                                                TimePoint now);
 
   // 安装由可信控制方提交的绑定，新实体或更高代次开始新的输入序列。
   RequestStatus bindEntity(Space& space, EntityBinding binding);
