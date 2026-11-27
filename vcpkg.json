@@ -3,5 +3,15 @@
   "name": "popengine",
   "version-string": "0.1",
   "builtin-baseline": "d13c536672dced4b8c671955ea7d057a1b7a1ff8",
-  "dependencies": ["lua", "spdlog", "yaml-cpp"]
+  "dependencies": ["lua", "spdlog", "yaml-cpp"],
+  "default-features": ["network-sdk"],
+  "features": {
+    "network-sdk": {
+      "description": "从锁定基线构建 Boost、OpenSSL、Protobuf 与 gRPC；MsQuic 采用独立共享库以隔离其 TLS 后端。",
+      "dependencies": [
+        "boost-asio", "boost-beast", "openssl", "protobuf",
+        { "name": "grpc", "features": ["codegen"] }
+      ]
+    }
+  }
 }
