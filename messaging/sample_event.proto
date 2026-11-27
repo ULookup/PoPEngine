@@ -1,0 +1,15 @@
+// 定义阶段三隔离计数样例的持久事件。重投和隔离重放沿用原消息身份。
+syntax = "proto3";
+package pop.sample;
+
+message CounterEvent {
+  uint64 event_id = 1;           // 同一事件每次投递使用相同标识。
+  string event_type = 2;         // 样例计数已提交事实。
+  uint64 aggregate_id = 3;       // 持久计数器标识。
+  uint64 aggregate_version = 4;  // 计数器提交后的递增版本。
+  uint64 operation_id = 5;       // 发起本次变更的稳定操作号。
+  string source_domain = 6;      // 产生权威事实的样例域。
+  uint64 committed_at_ms = 7;    // 数据库记录的 Unix 毫秒。
+  uint32 payload_schema_id = 8;  // 版本 1 的载荷为绝对计数。
+  uint64 value = 9;              // 对应版本的绝对计数。
+}

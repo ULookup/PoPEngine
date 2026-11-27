@@ -72,6 +72,7 @@ endforeach()
 option(POP_BUILD_DATA "构建阶段三持久化、可靠消息与缓存模块" OFF)
 if(POP_BUILD_DATA)
   add_subdirectory(storage)
+  add_subdirectory(messaging)
 endif()
 
 if(BUILD_TESTING)
