@@ -69,6 +69,11 @@ foreach(role IN ITEMS gateway game_worker platform control)
   target_link_libraries(${role} PRIVATE pop_apps)
 endforeach()
 
+option(POP_BUILD_DATA "构建阶段三持久化、可靠消息与缓存模块" OFF)
+if(POP_BUILD_DATA)
+  add_subdirectory(storage)
+endif()
+
 if(BUILD_TESTING)
   add_executable(quic_driver tests/quic_driver.cc)
   target_include_directories(quic_driver PRIVATE ${PROJECT_SOURCE_DIR})
