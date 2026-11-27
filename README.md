@@ -1,19 +1,20 @@
 # PopEngine
 
-本指南说明如何在 Linux 上构建、启动和验收第一阶段的四个服务端进程。默认配置让 GameWorker 在同一分片推进两个空 Space，Gateway、Platform 和 Control 提供各自的进程入口与模块生命周期。阶段范围见[开发计划](DevelopPlan.md)和[第一阶段方案](docs/Phase1.md)。
+本指南说明如何在 Linux 上构建和运行四个服务端进程。默认配置用于空载启动；网络验收使用临时证书和预置会话，通过真实 Gateway 向 GameWorker 提交输入。进程与 Space 的职责见[第一阶段方案](docs/Phase1.md)，传输、配置和驱动见[第二阶段方案](docs/Phase2.md)。
 
 ## 构建
 
-在仓库根目录执行。已验证的开发环境为 x86_64 Linux、G++ 11.4、CMake/CTest 3.22、Ninja 和 vcpkg。进程验收用例使用 Python 3 标准库。将 `VCPKG_ROOT` 指向已引导的 vcpkg 目录，工程会按清单安装 yaml-cpp、spdlog 和 Lua。
+在仓库根目录执行。需要 GCC、CMake 3.22 以上、Ninja、vcpkg 和 MsQuic 共享库。Ubuntu 22.04 可用仓库脚本在构建目录安装指定版本的 MsQuic；已有 SDK 的环境可设置 `MsQuic_ROOT`。网络验收另需 Python 3、OpenSSL 命令行和 Nginx，可通过 `POP_NGINX_EXECUTABLE` 指定 Nginx 可执行文件。
 
 ```bash
 export VCPKG_ROOT="$HOME/tools/vcpkg"
+./scripts/install-msquic-sdk.sh
 cmake --preset linux-gcc
 cmake --build --preset linux-gcc
 ctest --preset linux-gcc
 ```
 
-四个可执行文件位于 `build/linux-gcc/`。要复现首次配置，使用一份源码副本，从空构建目录执行同一组命令。vcpkg 的共享二进制缓存可复用。
+四个可执行文件位于 `build/linux-gcc/`。默认由 vcpkg 清单解析 Boost、OpenSSL、Protobuf 和 gRPC。若使用系统开发包，配置时可执行 `cmake --preset linux-gcc -DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON`；此时需要系统中的 Boost.Asio/Beast、OpenSSL、Protobuf、gRPC C++、配套的 `protoc` 和 `grpc_cpp_plugin`。已有的 yaml-cpp、spdlog、Lua 仍由 vcpkg 管理。
 
 ## 本地运行
 
@@ -60,5 +61,8 @@ LOG_ERROR("event=space_failed space={} reason={}", space_id, reason);
 | `ProcessLifecycle` | 启动四个实际进程，检查空场持续推进且后台工作量为零，发送 SIGINT 或 SIGTERM 并等待各进程退出。 |
 | `UnassignedWorker` | 以空放置列表启动 Worker，验证分片就绪、无场景创建和有序停机。 |
 | `InvalidConfig` | 用错误角色、缺失队列预算和重复 Space 绑定启动，检查退出状态与报错字段。 |
+| `TransportQueue`、`InputBatching` | 核对帧长度、在途发送计费、可替换项合并，以及批量输入的分组和拒绝回执。 |
+| `RealtimeIngress` | 以真实 QUIC、TCP/TLS 和内部 mTLS 连接核对输入序号、提交 Tick、已发布状态、证书及慢连接隔离。 |
+| `PlatformHttpsHealth`、`ControlRpcDeadline` | 通过 Nginx HTTPS 读取 Beast 健康端点，并通过双向认证的 gRPC 验证就绪查询、截止和取消。 |
 
 单独复现旧结果时可执行 `ctest --preset linux-gcc -R '^WorkResults$' -V`。整轮执行输出保存在 `build/linux-gcc/Testing/Temporary/LastTest.log`。
