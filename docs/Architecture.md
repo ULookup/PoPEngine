@@ -122,6 +122,8 @@ flowchart LR
 
 Gateway 到 GameWorker 的两条 mTLS 长连接各有独立队列和预算。输入经有界邮箱进入所属 Scene 分片，分片采纳输入并发布该步快照后，才沿原路返回携带 `server_tick` 的 `APPLIED`。状态查询读取最近一次已发布的快照。QUIC 使用数据报传输输入和普通状态，使用可靠流返回执行回执。[第二阶段通信方案](Phase2.md)
 
+阶段 3 的隔离驱动在上述进程配置之外显式装配数据模块。数据库执行池经 MySQL Router 将样例计数、操作结果和 Outbox 原子提交；基础设施线程通过 RabbitMQ quorum queue 投递事件，消费端在 MySQL 提交 Inbox 和持久投影，再更新 Redis Cluster 读视图。普通 Scene Tick 继续使用本地内存。[第三阶段数据路径与验收](Phase3.md)
+
 ### 3.2 目标逻辑架构
 
 | 层次 | 主要职责 | 服务或基础设施 |

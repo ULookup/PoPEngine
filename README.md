@@ -4,6 +4,8 @@
 
 四个进程的通信路径见[当前运行架构图](docs/Architecture.md#31-当前运行架构)。
 
+阶段 3 提供 MySQL 异步事务、RabbitMQ 可靠投递和 Redis Cluster 读视图。启用 `POP_BUILD_DATA` 后可运行隔离集成用例 `DataRecovery`。所需 SDK、构建命令和恢复场景见[阶段三实现与验收](docs/Phase3.md)。
+
 ## 构建
 
 在仓库根目录执行。需要 GCC、CMake 3.22 以上、Ninja、vcpkg 和 MsQuic 共享库。Ubuntu 22.04 可用仓库脚本在构建目录安装指定版本的 MsQuic；已有 SDK 的环境可设置 `MsQuic_ROOT`。网络验收另需 Python 3、OpenSSL 命令行和 Nginx，可通过 `POP_NGINX_EXECUTABLE` 指定 Nginx 可执行文件。
