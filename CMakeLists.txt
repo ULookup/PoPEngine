@@ -70,6 +70,9 @@ foreach(role IN ITEMS gateway game_worker platform control)
 endforeach()
 
 if(BUILD_TESTING)
+  add_executable(quic_driver tests/quic_driver.cc)
+  target_include_directories(quic_driver PRIVATE ${PROJECT_SOURCE_DIR})
+  target_link_libraries(quic_driver PRIVATE MsQuic::MsQuic OpenSSL::Crypto Threads::Threads)
   add_executable(transport_queue_test tests/transport_queue_test.cc)
   target_link_libraries(transport_queue_test PRIVATE pop_net OpenSSL::SSL)
   add_test(NAME TransportQueue COMMAND transport_queue_test)
@@ -77,6 +80,11 @@ if(BUILD_TESTING)
   target_include_directories(input_forwarder_test PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
   target_link_libraries(input_forwarder_test PRIVATE pop_net pop_protobuf)
   add_test(NAME InputBatching COMMAND input_forwarder_test)
+  add_test(NAME RealtimeIngress COMMAND Python3::Interpreter -B
+    "${PROJECT_SOURCE_DIR}/tests/realtime_integration.py"
+    $<TARGET_FILE:game_worker> $<TARGET_FILE:gateway> $<TARGET_FILE:quic_driver>
+    $<TARGET_FILE:transport_queue_test> $<TARGET_FILE:pop_protoc>)
+  set_tests_properties(RealtimeIngress PROPERTIES TIMEOUT 45)
   add_executable(runtime_test tests/runtime_test.cc)
   target_link_libraries(runtime_test PRIVATE pop_runtime)
   foreach(scenario IN ITEMS TwoSpaces WorkResults MailboxLimits WorkerIngress)
