@@ -27,7 +27,7 @@ class InfoSink : public spdlog::sinks::stdout_sink_mt {
 
 }  // namespace
 
-void StartLogging(const std::string& role, std::size_t entries) {
+std::string StartLogging(const std::string& role, std::size_t entries) {
   std::string instance;
   std::ifstream uuid("/proc/sys/kernel/random/uuid");
   if (!(uuid >> instance)) {
@@ -50,6 +50,7 @@ void StartLogging(const std::string& role, std::size_t entries) {
   errors->set_pattern(context + " level=%l %v");
   logger->flush_on(spdlog::level::info);
   spdlog::set_default_logger(std::move(logger));
+  return instance;
 }
 
 void StopLogging() {

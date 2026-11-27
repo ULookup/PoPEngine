@@ -11,10 +11,13 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 #include "engine/core/config.h"
 #include "engine/core/log.h"
+#include "engine/net/control_endpoints.h"
+#include "engine/net/realtime.h"
 #include "services/game_worker.h"
 
 namespace pop {
@@ -68,13 +71,30 @@ int RunProcess(Role role, int argc, char** argv) {
       throw std::runtime_error("cannot block shutdown signals");
     }
 
-    StartLogging(assembly.m_role, config.m_logEntries);
+    const auto instance = StartLogging(assembly.m_role, config.m_logEntries);
     logging_ready = true;
 
     std::unique_ptr<GameWorker> worker;
     if (role == Role::GameWorker) {
       worker = std::make_unique<GameWorker>(config);
     }
+
+    const auto& network = config.m_network;
+    const auto& service_config = network.m_service;
+    std::unique_ptr<NetworkListener> listener;
+    if (const auto* gateway = std::get_if<GatewayNetwork>(&service_config)) {
+      listener = StartRealtimeGateway(*gateway, network.m_limits);
+    } else if (const auto* scene = std::get_if<SceneNetwork>(&service_config)) {
+      listener = StartSceneIngress(*scene, network.m_limits, instance, *worker);
+    } else if (const auto* platform =
+                   std::get_if<PlatformNetwork>(&service_config)) {
+      listener = StartPlatformHealth(platform->m_http, network.m_limits);
+    } else if (const auto* control =
+                   std::get_if<ControlNetwork>(&service_config)) {
+      listener =
+          StartControlRpc(control->m_rpc, control->m_tls, network.m_limits);
+    }
+
     for (auto service : assembly.m_services) {
       LOG_INFO("event=service_start service={}", service);
     }
@@ -85,6 +105,7 @@ int RunProcess(Role role, int argc, char** argv) {
       throw std::runtime_error("sigwait failed");
     }
 
+    listener.reset();
     if (worker) {
       worker->stop();
     }

@@ -7,6 +7,7 @@
 #include <limits>
 #include <set>
 #include <stdexcept>
+#include <utility>
 
 namespace pop {
 namespace {
@@ -30,6 +31,103 @@ Id Identifier(const YAML::Node& node, const std::string& key) {
   return value;
 }
 
+// 读取必要字符串；报错时只记录键名，保护凭据内容。
+std::string RequiredText(const YAML::Node& node, const char* key) {
+  const auto value = node[key].as<std::string>("");
+  if (value.empty()) {
+    throw std::runtime_error(std::string("missing network field ") + key);
+  }
+  return value;
+}
+
+// 检查 TCP/UDP 端口后才收窄为传输库的整数类型。
+Endpoint ReadEndpoint(const YAML::Node& node) {
+  const auto port = Number(node, "port");
+  if (port > 65535) {
+    throw std::runtime_error("network port outside 1..65535");
+  }
+  return {RequiredText(node, "host"), static_cast<std::uint16_t>(port)};
+}
+
+// 内部链路必须同时配置可信 CA、对端身份与本端密钥对。
+TlsFiles ReadTls(const YAML::Node& node, bool mutual) {
+  return {
+      .m_ca = mutual ? RequiredText(node, "ca") : "",
+      .m_certificate = RequiredText(node, "certificate"),
+      .m_key = RequiredText(node, "key"),
+      .m_peerName = mutual ? RequiredText(node, "peer_name") : "",
+  };
+}
+
+// 验收身份只允许装配在明确的回环地址上，避免 DNS 变化扩大信任范围。
+void RequireLoopback(const Endpoint& endpoint) {
+  if (endpoint.m_host != "127.0.0.1" && endpoint.m_host != "::1") {
+    throw std::runtime_error("isolated_fixture requires a loopback address");
+  }
+}
+
+// 验收绑定从配置读取，网关无需信任客户端声称的归属信息。
+FixtureBinding ReadBinding(const YAML::Node& node) {
+  return {Identifier(node, "space_id"),
+          {.m_entity = Identifier(node, "entity_id"),
+           .m_generation = Identifier(node, "entity_generation"),
+           .m_sessionEpoch = Identifier(node, "session_epoch")}};
+}
+
+// 按进程角色加载所需端点，缺少 network 段时沿用空载启动契约。
+NetworkConfig ReadNetwork(const YAML::Node& net, const std::string& role) {
+  NetworkConfig config;
+  if (!net) {
+    return config;
+  }
+  if (!net.IsMap()) {
+    throw std::runtime_error("network must be a mapping");
+  }
+  if (const auto limits = net["limits"]) {
+    config.m_limits = {
+        .m_maxConnections = Number(limits, "max_connections"),
+        .m_queueEntries = Number(limits, "queue_entries"),
+        .m_queueBytes = Number(limits, "queue_bytes"),
+        .m_timeout = Milliseconds(Number(limits, "timeout_ms")),
+    };
+  }
+
+  const auto fixture = net["isolated_fixture"];
+  if (role == "gateway") {
+    GatewayNetwork gateway{ReadEndpoint(net["ingress"]),
+                           ReadEndpoint(net["scene"]),
+                           ReadTls(net["public_tls"], false),
+                           ReadTls(net["tls"], true),
+                           {}};
+    if (fixture) {
+      RequireLoopback(gateway.m_ingress);
+      RequireLoopback(gateway.m_scene);
+      gateway.m_route = FixtureRoute{
+          ReadBinding(fixture), RequiredText(fixture, "worker_instance_id"),
+          RequiredText(fixture, "token_file")};
+    }
+    config.m_service = std::move(gateway);
+  } else if (role == "game_worker") {
+    if (config.m_limits.m_maxConnections < 2) {
+      throw std::runtime_error(
+          "Scene needs separate input and state connections");
+    }
+    SceneNetwork scene{
+        ReadEndpoint(net["scene"]), ReadTls(net["tls"], true), {}};
+    if (fixture) {
+      RequireLoopback(scene.m_endpoint);
+      scene.m_fixture = ReadBinding(fixture);
+    }
+    config.m_service = std::move(scene);
+  } else if (role == "platform") {
+    config.m_service = PlatformNetwork{ReadEndpoint(net["http"])};
+  } else if (role == "control") {
+    config.m_service =
+        ControlNetwork{ReadEndpoint(net["rpc"]), ReadTls(net["tls"], true)};
+  }
+  return config;
+}
+
 }  // namespace
 
 Config LoadConfig(const std::string& path, const std::string& role) {
@@ -40,6 +138,7 @@ Config LoadConfig(const std::string& path, const std::string& role) {
   }
 
   config.m_logEntries = Number(yaml, "log_entries");
+  config.m_network = ReadNetwork(yaml["network"], role);
   if (role != "game_worker") {
     return config;
   }

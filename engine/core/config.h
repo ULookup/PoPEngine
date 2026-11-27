@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "engine/core/types.h"
+#include "engine/net/settings.h"
 
 namespace pop {
 
@@ -18,6 +19,7 @@ struct Config {
   unsigned m_computeThreads{};        // 处理只读任务的计算线程数。
   Budgets m_budgets{};                // 每个 Space 创建邮箱时采用的通道预算。
   std::vector<SpaceConfig> m_spaces;  // 本 Worker 承载的 Space 及其分片。
+  NetworkConfig m_network;            // 可选的角色网络配置。
 };
 
 // 从 path 读取与 role 匹配的配置；缺项或绑定冲突时抛出异常。

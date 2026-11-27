@@ -62,7 +62,7 @@ target_link_libraries(pop_net PUBLIC pop_runtime PRIVATE Boost::headers
 target_compile_options(pop_net PRIVATE -Wall -Wextra -Wpedantic)
 
 add_library(pop_apps apps/process.cc)
-target_link_libraries(pop_apps PUBLIC pop_runtime)
+target_link_libraries(pop_apps PUBLIC pop_net pop_control_endpoints)
 
 foreach(role IN ITEMS gateway game_worker platform control)
   add_executable(${role} apps/${role}/main.cc)

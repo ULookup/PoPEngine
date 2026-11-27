@@ -10,8 +10,8 @@
 
 namespace pop {
 
-// 安装角色 role 的默认异步日志器，队列容量为 entries 条。
-void StartLogging(const std::string& role, std::size_t entries);
+// 安装默认异步日志器，返回本次进程启动的实例标识，用于日志与路由核对。
+std::string StartLogging(const std::string& role, std::size_t entries);
 
 // 在生产日志的线程退出后调用，关闭日志器并回收后台写入线程。
 void StopLogging();
