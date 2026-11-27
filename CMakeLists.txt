@@ -74,6 +74,13 @@ if(POP_BUILD_DATA)
   add_subdirectory(storage)
   add_subdirectory(messaging)
   add_subdirectory(engine/cache)
+  if(BUILD_TESTING)
+    add_executable(data_driver tests/data_driver.cc tests/data_messaging_edges.cc)
+    target_link_libraries(data_driver PRIVATE pop_runtime pop_cache pop_messaging)
+    add_test(NAME DataRecovery COMMAND Python3::Interpreter -B
+      "${PROJECT_SOURCE_DIR}/tests/data_recovery.py" $<TARGET_FILE:data_driver>)
+    set_tests_properties(DataRecovery PROPERTIES TIMEOUT 240)
+  endif()
 endif()
 
 if(BUILD_TESTING)
