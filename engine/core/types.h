@@ -23,6 +23,9 @@ inline constexpr Milliseconds TICK_STEP{50};
 // 同一调度轮中，一个 Space 最多补算的步数。
 inline constexpr int MAX_CATCH_UP = 2;
 
+// 静态放置的 Space 从首个承载代次开始，由网关与所属 Worker 共同校验。
+inline constexpr Id INITIAL_SPACE_OWNER_EPOCH = 1;
+
 // 一个邮箱通道的排队上限和每次消费的来源配额。
 struct QueueBudget {
   std::size_t m_entries;    // 同时排队的最大消息数。

@@ -22,6 +22,15 @@ find_package(Protobuf REQUIRED)
 add_executable(pop_protoc ALIAS protobuf::protoc)
 add_library(pop_protobuf ALIAS protobuf::libprotobuf)
 
+set(realtime_proto "${PROJECT_SOURCE_DIR}/proto/realtime.proto")
+add_custom_command(
+  OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/realtime.pb.cc"
+         "${CMAKE_CURRENT_BINARY_DIR}/realtime.pb.h"
+  COMMAND pop_protoc "-I${PROJECT_SOURCE_DIR}/proto"
+          "--cpp_out=${CMAKE_CURRENT_BINARY_DIR}" "${realtime_proto}"
+  DEPENDS "${realtime_proto}" pop_protoc
+  VERBATIM)
+
 add_library(pop_runtime
   engine/core/config.cc
   engine/core/log.cc
@@ -38,9 +47,17 @@ target_compile_options(pop_runtime PRIVATE -Wall -Wextra -Wpedantic)
 add_library(pop_net
   engine/net/send_queue.cc
   engine/net/tls_transport.cc
-  engine/net/quic_transport.cc)
+  engine/net/quic_transport.cc
+  engine/net/wire_frame.cc
+  engine/net/pending_replies.cc
+  engine/net/scene_ingress.cc
+  engine/net/input_forwarder.cc
+  engine/net/state_channel.cc
+  engine/net/realtime_gateway.cc
+  "${CMAKE_CURRENT_BINARY_DIR}/realtime.pb.cc")
+target_include_directories(pop_net PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(pop_net PUBLIC pop_runtime PRIVATE Boost::headers
-  OpenSSL::SSL OpenSSL::Crypto MsQuic::MsQuic)
+  OpenSSL::SSL OpenSSL::Crypto MsQuic::MsQuic pop_protobuf)
 target_compile_options(pop_net PRIVATE -Wall -Wextra -Wpedantic)
 
 add_library(pop_apps apps/process.cc)
@@ -55,6 +72,10 @@ if(BUILD_TESTING)
   add_executable(transport_queue_test tests/transport_queue_test.cc)
   target_link_libraries(transport_queue_test PRIVATE pop_net OpenSSL::SSL)
   add_test(NAME TransportQueue COMMAND transport_queue_test)
+  add_executable(input_forwarder_test tests/input_forwarder_test.cc)
+  target_include_directories(input_forwarder_test PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+  target_link_libraries(input_forwarder_test PRIVATE pop_net pop_protobuf)
+  add_test(NAME InputBatching COMMAND input_forwarder_test)
   add_executable(runtime_test tests/runtime_test.cc)
   target_link_libraries(runtime_test PRIVATE pop_runtime)
   foreach(scenario IN ITEMS TwoSpaces WorkResults MailboxLimits WorkerIngress)

@@ -1,0 +1,105 @@
+// 定义阶段二的实时信封、网关到 Scene 的批次及执行回执。样例输入仅供隔离驱动使用。
+syntax = "proto3";
+package pop.wire;
+
+// 类型编号决定允许出现的通道与载荷结构。
+enum MessageType {
+  UNSPECIFIED = 0;         // 缺少类型，接收端返回不支持。
+  SAMPLE_INPUT = 1;        // 隔离客户端提交一次完整输入。
+  INPUT_BATCH = 2;         // 网关转发给同一承载者的输入集合。
+  INPUT_RECEIPT = 3;       // 向输入来源报告执行状态。
+  SAMPLE_STATE_QUERY = 4;  // 隔离客户端查询本场最近发布的统计。
+  STATE_QUERY = 5;         // 网关在普通状态通道转发的查询。
+  PUBLISHED_STATE = 6;     // 可覆盖的统计快照或本次查询状态。
+}
+
+// 传输层完成边界检查后，应用再验证类型与载荷声明的字节数。
+message Envelope {
+  uint32 protocol_id = 1;        // 本阶段采用协议 1。
+  MessageType message_type = 2;  // 决定接收方用于解释载荷的消息类型。
+  uint32 payload_length = 3;     // 序列化载荷的字节数，不含信封和流前缀。
+  bytes payload = 4;             // 一条完整的对应类型消息。
+}
+
+// 仅在回环验收环境装配此消息。可信角色、Space 与会话代次取自网关配置。
+message SampleInput {
+  bytes fixture_token = 1;  // 本次回环验收的 32 字节随机凭据。
+  uint64 input_seq = 2;     // 在本次实体会话绑定内递增。
+  bytes state = 3;          // 当前完整控制状态，最多 768 字节。
+}
+
+// Gateway 在已认证的内网连接上发送；同一批次属于同一 Space 和承载实例。
+message InputBatch {
+  uint64 space_id = 1;              // 批内输入共同所属的场景。
+  uint64 space_owner_epoch = 2;     // 该场当前的承载代次。
+  string worker_instance_id = 3;    // 本次启动的目标 Worker 实例。
+  repeated RoutedInput inputs = 4;  // 批内每项各自获得回执。
+}
+
+// request_id 在线路上关联一次转发。输入序号的作用域是实体会话绑定。
+message RoutedInput {
+  uint64 request_id = 1;         // 网关分配的关联号，用于找到原连接。
+  uint64 entity_id = 2;          // 受控实体。
+  uint64 entity_generation = 3;  // 区分该实体标识的不同生命周期。
+  uint64 session_epoch = 4;      // 区分同一实体的不同控制会话。
+  uint64 input_seq = 5;          // 原连接提交的输入序号。
+  bytes state = 6;               // 网关已校验过长度的完整控制状态。
+  int64 expires_at_unix_ms = 7;  // 从网关收包起计的截止时间，Unix 毫秒。
+}
+
+// 运输中断或回执超时保留 UNKNOWN；只有场景完成该 Tick 才返回 APPLIED。
+enum InputStatus {
+  UNKNOWN = 0;      // 网关无法确认该输入是否已执行。
+  APPLIED = 1;      // Scene 已采纳输入并发布对应 Tick。
+  EXPIRED = 2;      // 输入在被采纳之前已超过有效期。
+  STALE = 3;        // 实体绑定或序号已失效。
+  SUPERSEDED = 4;   // 已排队的输入被同一绑定的更新输入覆盖。
+  BUSY = 5;         // 转发或投递受预算限制，本次输入未获接纳。
+  REJECTED = 6;     // 请求无效、未获授权或在执行前取消。
+  STALE_ROUTE = 7;  // 目标 Space、承载代次或 Worker 实例已失配。
+  UNSUPPORTED = 8;  // 此入口无法处理该消息类型。
+}
+
+// Gateway 用 request_id 找回原连接。server_tick 由 Scene 发布该步状态后填写。
+message InputReceipt {
+  uint64 request_id = 1;   // 对应的内部转发号，未分配时为零。
+  uint64 input_seq = 2;    // 发起方提供的输入序号。
+  uint64 space_id = 3;     // 由可信路由确定的目标场景。
+  uint64 server_tick = 4;  // APPLIED 时为权威提交步。
+  InputStatus status = 5;  // 当前请求的处理结论。
+}
+
+// 客户端在其连接内关联一次采样，Space 和承载者由网关从可信绑定选取。
+message SampleStateQuery {
+  bytes fixture_token = 1;  // 与样例输入共用本次验收凭据。
+  uint64 query_id = 2;      // 由观察者分配，在该连接内关联应答。
+}
+
+// 由网关生成通道内唯一的查询号，多个连接即使选了相同的 query_id 也能区分。
+message StateQuery {
+  uint64 query_id = 1;            // 网关状态通道分配的关联号。
+  uint64 space_id = 2;            // 待读取快照的场景。
+  uint64 space_owner_epoch = 3;   // 网关期望的场景承载代次。
+  string worker_instance_id = 4;  // 网关期望的 Worker 实例。
+}
+
+// 普通统计查询的结果，与输入的权威执行回执分别解释。
+enum StateStatus {
+  STATE_UNKNOWN = 0;      // 等待结果时已超过截止时间。
+  STATE_AVAILABLE = 1;    // 响应包含一个已发布 Tick 的统计。
+  STATE_BUSY = 2;         // 通道或在途表无法接纳本次查询。
+  STATE_STALE_ROUTE = 3;  // 当前承载实例无法提供请求的场景快照。
+  STATE_REJECTED = 4;     // 查询无效或未获授权。
+}
+
+// 直接复制 Scene 已发布的运行统计。重复采样只需保留同一观察连接的最新帧。
+message PublishedState {
+  uint64 query_id = 1;        // 接收方在其连接上提交的查询号。
+  uint64 space_id = 2;        // 快照所属场景。
+  StateStatus status = 3;     // 指明以下统计是否可读。
+  uint64 server_tick = 4;     // 统计对应的已发布 Tick。
+  uint64 entities = 5;        // 此时场内已绑定的实体数。
+  uint64 inputs = 6;          // 该场累计采纳的输入数。
+  uint64 dispatched = 7;      // 该场累计派发的后台任务数。
+  uint64 result_commits = 8;  // 该场累计提交的后台结果数。
+}
