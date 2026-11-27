@@ -2,6 +2,8 @@
 
 本指南说明如何在 Linux 上构建和运行四个服务端进程。默认配置用于空载启动；网络验收使用临时证书和预置会话，通过真实 Gateway 向 GameWorker 提交输入。进程与 Space 的职责见[第一阶段方案](docs/Phase1.md)，传输、配置和驱动见[第二阶段方案](docs/Phase2.md)。
 
+四个进程的通信路径见[当前运行架构图](docs/Architecture.md#31-当前运行架构)。
+
 ## 构建
 
 在仓库根目录执行。需要 GCC、CMake 3.22 以上、Ninja、vcpkg 和 MsQuic 共享库。Ubuntu 22.04 可用仓库脚本在构建目录安装指定版本的 MsQuic；已有 SDK 的环境可设置 `MsQuic_ROOT`。网络验收另需 Python 3、OpenSSL 命令行和 Nginx，可通过 `POP_NGINX_EXECUTABLE` 指定 Nginx 可执行文件。

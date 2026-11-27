@@ -9,6 +9,8 @@
 - [1. 文档目的与架构结论](#1-文档目的与架构结论)
 - [2. 技术栈](#2-技术栈)
 - [3. 逻辑分层](#3-逻辑分层)
+  - [3.1 当前运行架构](#31-当前运行架构)
+  - [3.2 目标逻辑架构](#32-目标逻辑架构)
 - [4. 服务职责](#4-服务职责)
 - [5. 世界、空间与执行单位](#5-世界空间与执行单位)
 - [6. 状态所有权](#6-状态所有权)
@@ -88,6 +90,39 @@
 ODB 封装在 Repository 内，持久化记录与运行时实体分离。常规持久化采用对象映射，关键条件更新与复杂查询采用参数化 SQL，并与 ODB 共享事务连接。ODB 的对象映射和原生 SQL 能力为该组合提供基础。[R7]
 
 ## 3. 逻辑分层
+
+### 3.1 当前运行架构
+
+阶段 2 已在本地回环环境运行以下链路。实时协议驱动使用预置的实体和会话绑定。默认配置可让四个进程空载启动，配置相应网络端点后才开启监听。
+
+```mermaid
+flowchart LR
+    subgraph client ["验收客户端"]
+        realtimeClient["实时协议驱动"]
+        httpProbe["HTTPS 探针"]
+        rpcClient["控制 RPC 驱动"]
+    end
+    subgraph gateway ["接入"]
+        realtimeGateway["Gateway"]
+        nginx["Nginx"]
+    end
+    subgraph service ["服务进程"]
+        worker["GameWorker · Scene 分片"]
+        platform["Platform · Boost.Beast"]
+        control["Control · WorldCoordinator"]
+    end
+
+    realtimeClient <-->|"QUIC 或 TCP/TLS"| realtimeGateway
+    realtimeGateway <-->|"mTLS · 输入批次与执行回执"| worker
+    realtimeGateway <-->|"mTLS · 查询与状态快照"| worker
+    httpProbe -->|"HTTPS"| nginx
+    nginx -->|"HTTP GET /healthz"| platform
+    rpcClient -->|"gRPC mTLS · Check / Watch"| control
+```
+
+Gateway 到 GameWorker 的两条 mTLS 长连接各有独立队列和预算。输入经有界邮箱进入所属 Scene 分片，分片采纳输入并发布该步快照后，才沿原路返回携带 `server_tick` 的 `APPLIED`。状态查询读取最近一次已发布的快照。QUIC 使用数据报传输输入和普通状态，使用可靠流返回执行回执。[第二阶段通信方案](Phase2.md)
+
+### 3.2 目标逻辑架构
 
 | 层次 | 主要职责 | 服务或基础设施 |
 | --- | --- | --- |
