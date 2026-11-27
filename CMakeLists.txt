@@ -35,6 +35,14 @@ target_link_libraries(pop_runtime PUBLIC Threads::Threads spdlog::spdlog
   PRIVATE yaml-cpp::yaml-cpp ${LUA_LIBRARIES})
 target_compile_options(pop_runtime PRIVATE -Wall -Wextra -Wpedantic)
 
+add_library(pop_net
+  engine/net/send_queue.cc
+  engine/net/tls_transport.cc
+  engine/net/quic_transport.cc)
+target_link_libraries(pop_net PUBLIC pop_runtime PRIVATE Boost::headers
+  OpenSSL::SSL OpenSSL::Crypto MsQuic::MsQuic)
+target_compile_options(pop_net PRIVATE -Wall -Wextra -Wpedantic)
+
 add_library(pop_apps apps/process.cc)
 target_link_libraries(pop_apps PUBLIC pop_runtime)
 
@@ -44,6 +52,9 @@ foreach(role IN ITEMS gateway game_worker platform control)
 endforeach()
 
 if(BUILD_TESTING)
+  add_executable(transport_queue_test tests/transport_queue_test.cc)
+  target_link_libraries(transport_queue_test PRIVATE pop_net OpenSSL::SSL)
+  add_test(NAME TransportQueue COMMAND transport_queue_test)
   add_executable(runtime_test tests/runtime_test.cc)
   target_link_libraries(runtime_test PRIVATE pop_runtime)
   foreach(scenario IN ITEMS TwoSpaces WorkResults MailboxLimits WorkerIngress)
