@@ -1,0 +1,29 @@
+// 为阶段二控制面验收客户端声明标准 grpc.health.v1 消息及其已使用的接口。
+// 编号与 gRPC Health Checking Protocol 一致，服务端使用 gRPC C++ 内置实现。
+syntax = "proto3";
+
+package grpc.health.v1;
+
+// 查询目标 gRPC 服务的就绪状态。
+service Health {
+  // 读取当前就绪状态。
+  rpc Check(HealthCheckRequest) returns (HealthCheckResponse);
+  // 先返回当前状态，随后在状态变化时更新，直到取消或超过截止时间。
+  rpc Watch(HealthCheckRequest) returns (stream HealthCheckResponse);
+}
+
+// 空服务名表示整个进程，WorldCoordinator 表示世界协调服务。
+message HealthCheckRequest {
+  string service = 1;
+}
+
+// 服务端最近一次报告的就绪状态。
+message HealthCheckResponse {
+  enum ServingStatus {
+    UNKNOWN = 0;          // 状态尚未确定。
+    SERVING = 1;          // 已可受理请求。
+    NOT_SERVING = 2;      // 暂停受理或即将关闭。
+    SERVICE_UNKNOWN = 3;  // 观察的服务尚未注册。
+  }
+  ServingStatus status = 1;
+}

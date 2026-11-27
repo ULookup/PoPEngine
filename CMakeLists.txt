@@ -21,6 +21,7 @@ find_package(MsQuic REQUIRED)
 find_package(Protobuf REQUIRED)
 add_executable(pop_protoc ALIAS protobuf::protoc)
 add_library(pop_protobuf ALIAS protobuf::libprotobuf)
+include(cmake/ControlEndpoints.cmake)
 
 set(realtime_proto "${PROJECT_SOURCE_DIR}/proto/realtime.proto")
 add_custom_command(
